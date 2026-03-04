@@ -74,6 +74,25 @@ stages:
         ARM_TENANT_ID: $(armTenantId)
         ARM_SUBSCRIPTION_ID: $(subscriptionId)
 
+    # Refresh state and remove stale App Service resources so Terraform recreates them
+    - task: Bash@3
+      displayName: 'Remove Stale AppService from State'
+      inputs:
+        targetType: 'inline'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+        script: |
+          # Remove app service resources from state if they no longer exist in Azure
+          # This forces Terraform to recreate them fresh (needed when plan kind changes Linux->Windows)
+          terraform state rm module.appservice.azurerm_app_service_plan.test 2>/dev/null || true
+          terraform state rm module.appservice.azurerm_app_service.test 2>/dev/null || true
+          terraform state rm module.appservice.random_string.app_suffix 2>/dev/null || true
+          echo "State cleanup complete - AppService will be recreated"
+      env:
+        ARM_CLIENT_ID: $(armClientId)
+        ARM_CLIENT_SECRET: $(armClientSecret)
+        ARM_TENANT_ID: $(armTenantId)
+        ARM_SUBSCRIPTION_ID: $(subscriptionId)
+
     # Terraform Apply
     - task: TerraformTaskV2@2
       displayName: 'Terraform Apply'

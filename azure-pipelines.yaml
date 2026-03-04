@@ -1,0 +1,463 @@
+name: Azure Pipelines
+
+variables:
+  python.version: '3.7.6'
+  azureServiceConnection: 'myServiceConnection' # Update with your Azure service connection name
+  resourceGroup: 'myResourceGroup'
+  location: 'East US'
+  terraformVersion: '1.0.0'
+
+stages:
+#--------------------------------------------#
+# PROVISION INFRASTRUCTURE
+#--------------------------------------------#
+- stage: ProvisionInfrastructure
+  displayName: 'Provision Infrastructure'
+  jobs:
+  - job: ProvisionTerraform
+    displayName: 'Terraform Apply'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    # Install Terraform
+    - task: TerraformInstaller@0
+      displayName: 'Install Terraform'
+      inputs:
+        terraformVersion: $(terraformVersion)
+    
+    # Terraform Init
+    - task: TerraformTaskV2@2
+      displayName: 'Terraform Init'
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+        backendServiceArm: $(azureServiceConnection)
+        backendAzureRmResourceGroupName: '$(resourceGroup)'
+        backendAzureRmStorageAccountName: 'tfstate$(Build.BuildId)'
+        backendAzureRmContainerName: 'tfstate'
+        backendAzureRmKey: 'terraform.tfstate'
+    
+    # Terraform Validate
+    - task: TerraformTaskV2@2
+      displayName: 'Terraform Validate'
+      inputs:
+        provider: 'azurerm'
+        command: 'validate'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+    
+    # Terraform Plan
+    - task: TerraformTaskV2@2
+      displayName: 'Terraform Plan'
+      inputs:
+        provider: 'azurerm'
+        command: 'plan'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+        environmentServiceNameAzureRM: $(azureServiceConnection)
+    
+    # Terraform Apply
+    - task: TerraformTaskV2@2
+      displayName: 'Terraform Apply'
+      inputs:
+        provider: 'azurerm'
+        command: 'apply'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+        environmentServiceNameAzureRM: $(azureServiceConnection)
+        commandOptions: '-auto-approve'
+    
+    # Capture Terraform Outputs
+    - task: Bash@3
+      displayName: 'Capture Terraform Outputs'
+      inputs:
+        targetType: 'inline'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+        script: |
+          echo "Extracting Terraform outputs..."
+          APP_SERVICE_NAME=$(terraform output -raw app_service_name)
+          PUBLIC_IP=$(terraform output -raw public_ip_address)
+          LOG_ANALYTICS_WORKSPACE_ID=$(terraform output -raw log_analytics_workspace_id)
+          LOG_ANALYTICS_SHARED_KEY=$(terraform output -raw log_analytics_shared_key)
+          
+          echo "##vso[task.setvariable variable=appServiceName;isOutput=true]$APP_SERVICE_NAME"
+          echo "##vso[task.setvariable variable=publicIP;isOutput=true]$PUBLIC_IP"
+          echo "##vso[task.setvariable variable=logAnalyticsWorkspaceId;isOutput=true]$LOG_ANALYTICS_WORKSPACE_ID"
+          echo "##vso[task.setvariable variable=logAnalyticsSharedKey;isOutput=true;isSecret=true]$LOG_ANALYTICS_SHARED_KEY"
+          
+          echo "App Service Name: $APP_SERVICE_NAME"
+          echo "Public IP: $PUBLIC_IP"
+          echo "Log Analytics Workspace ID: $LOG_ANALYTICS_WORKSPACE_ID"
+      name: terraformOutputs
+
+#--------------------------------------------#
+# BUILD
+#--------------------------------------------#
+- stage: Build
+  displayName: 'Build'
+  dependsOn: []
+  jobs:
+  - job: BuildArtifacts
+    displayName: 'Build Artifacts'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    # Archive FakeRestAPI
+    - task: ArchiveFiles@2
+      displayName: 'Archive FakeRestAPI'
+      inputs:
+        rootFolderOrFile: '$(System.DefaultWorkingDirectory)/automatedtesting/jmeter/fakerestapi'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/fakerestapi-$(Build.BuildId).zip'
+    
+    # Publish FakeRestAPI artifact
+    - publish: $(Build.ArtifactStagingDirectory)/fakerestapi-$(Build.BuildId).zip
+      displayName: 'Publish FakeRestAPI Artifact'
+      artifact: drop-fakerestapi
+    
+    # Publish Selenium Tests
+    - publish: $(System.DefaultWorkingDirectory)/automatedtesting/selenium
+      displayName: 'Publish Selenium Tests'
+      artifact: selenium
+    
+    # Publish Postman Tests
+    - publish: $(System.DefaultWorkingDirectory)/automatedtesting/postman
+      displayName: 'Publish Postman Tests'
+      artifact: postman
+    
+    # Publish JMeter Tests
+    - publish: $(System.DefaultWorkingDirectory)/automatedtesting/jmeter
+      displayName: 'Publish JMeter Tests'
+      artifact: jmeter
+
+#--------------------------------------------#
+# DEPLOY
+#--------------------------------------------#
+- stage: Deploy
+  displayName: 'Deploy'
+  dependsOn:
+  - Build
+  - ProvisionInfrastructure
+  jobs:
+  - deployment: DeployFakeRestAPI
+    displayName: 'Deploy FakeRestAPI to App Service'
+    pool:
+      vmImage: 'ubuntu-latest'
+    environment: 'TEST'
+    variables:
+      appServiceName: $[ stageDependencies.ProvisionInfrastructure.ProvisionTerraform.outputs['terraformOutputs.appServiceName'] ]
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebApp@1
+            displayName: 'Deploy FakeRestAPI to Azure App Service'
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              appType: 'webApp'
+              appName: $(appServiceName)
+              package: '$(Pipeline.Workspace)/drop-fakerestapi/fakerestapi-$(Build.BuildId).zip'
+              deploymentMethod: 'zipDeploy'
+
+#--------------------------------------------#
+# TEST - INTEGRATION (Postman)
+#--------------------------------------------#
+- stage: IntegrationTest
+  displayName: 'Integration Tests'
+  dependsOn: Deploy
+  jobs:
+  - job: PostmanTests
+    displayName: 'Run Postman Integration Tests'
+    pool:
+      vmImage: 'ubuntu-latest'
+    variables:
+      appServiceName: $[ stageDependencies.ProvisionInfrastructure.ProvisionTerraform.outputs['terraformOutputs.appServiceName'] ]
+    steps:
+    # Download Postman artifact
+    - download: current
+      artifact: postman
+    
+    # Install Node.js for Newman
+    - task: NodeTool@0
+      displayName: 'Install Node.js'
+      inputs:
+        versionSpec: '14.x'
+    
+    # Install Newman (Postman CLI)
+    - task: Bash@3
+      displayName: 'Install Newman'
+      inputs:
+        targetType: 'inline'
+        script: |
+          npm install -g newman
+          npm install -g newman-reporter-junitfull
+    
+    # Run Postman Tests
+    - task: Bash@3
+      displayName: 'Run Postman Tests'
+      inputs:
+        targetType: 'inline'
+        workingDirectory: '$(Pipeline.Workspace)/postman'
+        script: |
+          echo "Running Postman tests against: https://$(appServiceName).azurewebsites.net"
+          
+          # Update environment file with App Service URL
+          sed -i 's|"value": "http://localhost:5000"|"value": "https://$(appServiceName).azurewebsites.net"|g' TestEnvironment.json
+          
+          # Run Newman with JUnit reporter
+          newman run StarterAPIs.json \
+            -e TestEnvironment.json \
+            --reporters cli,junitfull \
+            --reporter-junitfull-export $(System.DefaultWorkingDirectory)/postman-results.xml
+    
+    # Publish Postman Test Results
+    - task: PublishTestResults@2
+      displayName: 'Publish Postman Test Results'
+      condition: succeededOrFailed()
+      inputs:
+        testResultsFormat: 'JUnit'
+        testResultsFiles: '$(System.DefaultWorkingDirectory)/postman-results.xml'
+        testRunTitle: 'Postman Integration Tests'
+        failTaskOnFailedTests: false
+
+#--------------------------------------------#
+# TEST - PERFORMANCE (JMeter)
+#--------------------------------------------#
+- stage: PerformanceTest
+  displayName: 'Performance Tests'
+  dependsOn: Deploy
+  jobs:
+  - job: JMeterStressTest
+    displayName: 'JMeter Stress Test'
+    pool:
+      vmImage: 'ubuntu-latest'
+    variables:
+      appServiceName: $[ stageDependencies.ProvisionInfrastructure.ProvisionTerraform.outputs['terraformOutputs.appServiceName'] ]
+    steps:
+    # Download JMeter artifact
+    - download: current
+      artifact: jmeter
+    
+    # Install JMeter
+    - task: Bash@3
+      displayName: 'Install Apache JMeter'
+      inputs:
+        targetType: 'inline'
+        script: |
+          wget https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.4.1.tgz
+          tar -xzf apache-jmeter-5.4.1.tgz
+          echo "##vso[task.setvariable variable=JMETER_HOME]$(pwd)/apache-jmeter-5.4.1"
+    
+    # Run Stress Test
+    - task: Bash@3
+      displayName: 'Run JMeter Stress Test'
+      inputs:
+        targetType: 'inline'
+        script: |
+          echo "Running Stress Test against: https://$(appServiceName).azurewebsites.net"
+          
+          $JMETER_HOME/bin/jmeter -n \
+            -t $(Pipeline.Workspace)/jmeter/StressTest.jmx \
+            -JBASE_URL=https://$(appServiceName).azurewebsites.net \
+            -l $(System.DefaultWorkingDirectory)/stress-test-results.jtl \
+            -j $(System.DefaultWorkingDirectory)/stress-test.log \
+            -e -o $(System.DefaultWorkingDirectory)/stress-test-report
+    
+    # Publish Stress Test Results
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Stress Test Report'
+      condition: succeededOrFailed()
+      inputs:
+        PathtoPublish: '$(System.DefaultWorkingDirectory)/stress-test-report'
+        ArtifactName: 'stress-test-report'
+    
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Stress Test Logs'
+      condition: succeededOrFailed()
+      inputs:
+        PathtoPublish: '$(System.DefaultWorkingDirectory)/stress-test.log'
+        ArtifactName: 'stress-test-logs'
+  
+  - job: JMeterEnduranceTest
+    displayName: 'JMeter Endurance Test'
+    pool:
+      vmImage: 'ubuntu-latest'
+    variables:
+      appServiceName: $[ stageDependencies.ProvisionInfrastructure.ProvisionTerraform.outputs['terraformOutputs.appServiceName'] ]
+    steps:
+    # Download JMeter artifact
+    - download: current
+      artifact: jmeter
+    
+    # Install JMeter
+    - task: Bash@3
+      displayName: 'Install Apache JMeter'
+      inputs:
+        targetType: 'inline'
+        script: |
+          wget https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.4.1.tgz
+          tar -xzf apache-jmeter-5.4.1.tgz
+          echo "##vso[task.setvariable variable=JMETER_HOME]$(pwd)/apache-jmeter-5.4.1"
+    
+    # Run Endurance Test
+    - task: Bash@3
+      displayName: 'Run JMeter Endurance Test'
+      inputs:
+        targetType: 'inline'
+        script: |
+          echo "Running Endurance Test against: https://$(appServiceName).azurewebsites.net"
+          
+          $JMETER_HOME/bin/jmeter -n \
+            -t $(Pipeline.Workspace)/jmeter/EnduranceTest.jmx \
+            -JBASE_URL=https://$(appServiceName).azurewebsites.net \
+            -JDURATION=300 \
+            -l $(System.DefaultWorkingDirectory)/endurance-test-results.jtl \
+            -j $(System.DefaultWorkingDirectory)/endurance-test.log \
+            -e -o $(System.DefaultWorkingDirectory)/endurance-test-report
+    
+    # Publish Endurance Test Results
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Endurance Test Report'
+      condition: succeededOrFailed()
+      inputs:
+        PathtoPublish: '$(System.DefaultWorkingDirectory)/endurance-test-report'
+        ArtifactName: 'endurance-test-report'
+    
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Endurance Test Logs'
+      condition: succeededOrFailed()
+      inputs:
+        PathtoPublish: '$(System.DefaultWorkingDirectory)/endurance-test.log'
+        ArtifactName: 'endurance-test-logs'
+
+#--------------------------------------------#
+# TEST - FUNCTIONAL UI (Selenium)
+#--------------------------------------------#
+- stage: UITest
+  displayName: 'Functional UI Tests'
+  dependsOn: Deploy
+  jobs:
+  - job: SeleniumTests
+    displayName: 'Run Selenium UI Tests'
+    pool:
+      vmImage: 'ubuntu-latest'
+    variables:
+      appServiceName: $[ stageDependencies.ProvisionInfrastructure.ProvisionTerraform.outputs['terraformOutputs.appServiceName'] ]
+      logAnalyticsWorkspaceId: $[ stageDependencies.ProvisionInfrastructure.ProvisionTerraform.outputs['terraformOutputs.logAnalyticsWorkspaceId'] ]
+      logAnalyticsSharedKey: $[ stageDependencies.ProvisionInfrastructure.ProvisionTerraform.outputs['terraformOutputs.logAnalyticsSharedKey'] ]
+    steps:
+    # Download Selenium artifact
+    - download: current
+      artifact: selenium
+    
+    # Install Python
+    - task: UsePythonVersion@0
+      displayName: 'Use Python $(python.version)'
+      inputs:
+        versionSpec: '$(python.version)'
+    
+    # Install Chrome and ChromeDriver
+    - task: Bash@3
+      displayName: 'Install Chrome and ChromeDriver'
+      inputs:
+        targetType: 'inline'
+        script: |
+          # Install Chrome
+          wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt install ./google-chrome-stable_current_amd64.deb -y
+          
+          # Install ChromeDriver
+          CHROME_VERSION=$(google-chrome --version | awk '{print $3}' | cut -d'.' -f1)
+          wget https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION -O chrome_version
+          CHROMEDRIVER_VERSION=$(cat chrome_version)
+          wget https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip
+          unzip chromedriver_linux64.zip
+          sudo mv chromedriver /usr/local/bin/
+          sudo chmod +x /usr/local/bin/chromedriver
+          
+          echo "Chrome version: $(google-chrome --version)"
+          echo "ChromeDriver version: $(chromedriver --version)"
+    
+    # Install Selenium and dependencies
+    - task: Bash@3
+      displayName: 'Install Selenium and Dependencies'
+      inputs:
+        targetType: 'inline'
+        script: |
+          pip install selenium
+          pip install requests
+    
+    # Run Selenium Tests
+    - task: Bash@3
+      displayName: 'Run Selenium UI Tests'
+      inputs:
+        targetType: 'inline'
+        workingDirectory: '$(Pipeline.Workspace)/selenium'
+        script: |
+          echo "Running Selenium tests..."
+          export HEADLESS=1
+          python3 login.py
+    
+    # Upload Logs to Azure Log Analytics
+    - task: Bash@3
+      displayName: 'Upload Logs to Azure Log Analytics'
+      condition: always()
+      inputs:
+        targetType: 'inline'
+        workingDirectory: '$(Pipeline.Workspace)/selenium'
+        script: |
+          echo "Uploading Selenium logs to Azure Log Analytics..."
+          export LOG_ANALYTICS_WORKSPACE_ID=$(logAnalyticsWorkspaceId)
+          export LOG_ANALYTICS_SHARED_KEY=$(logAnalyticsSharedKey)
+          python3 upload_logs_to_azure.py
+    
+    # Publish Selenium Logs as Artifacts
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Selenium Logs'
+      condition: always()
+      inputs:
+        PathtoPublish: '$(Pipeline.Workspace)/selenium/log'
+        ArtifactName: 'selenium-logs'
+
+#--------------------------------------------#
+# DESTROY INFRASTRUCTURE (Optional - Manual Trigger)
+#--------------------------------------------#
+- stage: DestroyInfrastructure
+  displayName: 'Destroy Infrastructure'
+  dependsOn:
+  - IntegrationTest
+  - PerformanceTest
+  - UITest
+  condition: eq(variables['destroyInfrastructure'], 'true')
+  jobs:
+  - job: TerraformDestroy
+    displayName: 'Terraform Destroy'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: TerraformInstaller@0
+      displayName: 'Install Terraform'
+      inputs:
+        terraformVersion: $(terraformVersion)
+    
+    - task: TerraformTaskV2@2
+      displayName: 'Terraform Init'
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+        backendServiceArm: $(azureServiceConnection)
+        backendAzureRmResourceGroupName: '$(resourceGroup)'
+        backendAzureRmStorageAccountName: 'tfstate$(Build.BuildId)'
+        backendAzureRmContainerName: 'tfstate'
+        backendAzureRmKey: 'terraform.tfstate'
+    
+    - task: TerraformTaskV2@2
+      displayName: 'Terraform Destroy'
+      inputs:
+        provider: 'azurerm'
+        command: 'destroy'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+        environmentServiceNameAzureRM: $(azureServiceConnection)
+        commandOptions: '-auto-approve'
+
+

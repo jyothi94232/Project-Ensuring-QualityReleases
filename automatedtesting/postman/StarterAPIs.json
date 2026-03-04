@@ -1,0 +1,740 @@
+{
+	"info": {
+		"_postman_id": "968b3a18-cc72-48a2-9b6b-e8619b4aaca8",
+		"name": "FakeRestAPI - Integration Test Suite",
+		"description": "Comprehensive integration test suite with Data Validation and Regression tests for FakeRestAPI",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Data Validation Tests",
+			"item": [
+				{
+					"name": "Get All Activities - Data Validation",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Status Code Validation",
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"// Response Time Validation",
+									"pm.test(\"Response time is less than 2000ms\", function () {",
+									"    pm.expect(pm.response.responseTime).to.be.below(2000);",
+									"});",
+									"",
+									"// Content Type Validation",
+									"pm.test(\"Content-Type is application/json\", function () {",
+									"    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+									"});",
+									"",
+									"// Response Body Validation",
+									"pm.test(\"Response is an array\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"});",
+									"",
+									"// Data Structure Validation",
+									"pm.test(\"Activities have required fields\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.length > 0) {",
+									"        pm.expect(jsonData[0]).to.have.property('id');",
+									"        pm.expect(jsonData[0]).to.have.property('title');",
+									"        pm.expect(jsonData[0]).to.have.property('dueDate');",
+									"        pm.expect(jsonData[0]).to.have.property('completed');",
+									"    }",
+									"});",
+									"",
+									"// Data Type Validation",
+									"pm.test(\"Activity fields have correct data types\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.length > 0) {",
+									"        pm.expect(jsonData[0].id).to.be.a('number');",
+									"        pm.expect(jsonData[0].title).to.be.a('string');",
+									"        pm.expect(jsonData[0].completed).to.be.a('boolean');",
+									"    }",
+									"});",
+									"",
+									"// Save first activity ID for later tests",
+									"if (pm.response.json().length > 0) {",
+									"    pm.environment.set(\"activityId\", pm.response.json()[0].id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/Activities",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"Activities"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Activity by ID - Data Validation",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Status Code Validation",
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"// Response Body Validation",
+									"pm.test(\"Response is a valid activity object\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('object');",
+									"    pm.expect(jsonData).to.have.property('id');",
+									"});",
+									"",
+									"// ID Validation",
+									"pm.test(\"Activity ID matches request\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.id).to.eql(1);",
+									"});",
+									"",
+									"// Data Completeness Validation",
+									"pm.test(\"Activity has all required fields\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.all.keys('id', 'title', 'dueDate', 'completed');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/Activities/1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"Activities",
+								"1"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Activity - Data Validation",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Status Code Validation",
+									"pm.test(\"Status code is 200 or 201\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"// Response Body Validation",
+									"pm.test(\"Activity created successfully\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('object');",
+									"    pm.expect(jsonData).to.have.property('id');",
+									"});",
+									"",
+									"// Data Persistence Validation",
+									"pm.test(\"Created activity matches request data\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.title).to.eql('New Test Activity');",
+									"    pm.expect(jsonData.completed).to.eql(false);",
+									"});",
+									"",
+									"// Save created activity ID",
+									"pm.environment.set(\"createdActivityId\", pm.response.json().id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": 0,\n  \"title\": \"New Test Activity\",\n  \"dueDate\": \"2026-02-20T00:00:00.000Z\",\n  \"completed\": false\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/Activities",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"Activities"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Books - Data Validation",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Status Code Validation",
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"// Response Format Validation",
+									"pm.test(\"Response is an array\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"});",
+									"",
+									"// Data Structure Validation",
+									"pm.test(\"Books have required fields\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.length > 0) {",
+									"        pm.expect(jsonData[0]).to.have.property('id');",
+									"        pm.expect(jsonData[0]).to.have.property('title');",
+									"        pm.expect(jsonData[0]).to.have.property('description');",
+									"        pm.expect(jsonData[0]).to.have.property('pageCount');",
+									"    }",
+									"});",
+									"",
+									"// Data Type Validation",
+									"pm.test(\"Book fields have correct data types\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.length > 0) {",
+									"        pm.expect(jsonData[0].id).to.be.a('number');",
+									"        pm.expect(jsonData[0].title).to.be.a('string');",
+									"        pm.expect(jsonData[0].pageCount).to.be.a('number');",
+									"    }",
+									"});",
+									"",
+									"// Save first book ID",
+									"if (pm.response.json().length > 0) {",
+									"    pm.environment.set(\"bookId\", pm.response.json()[0].id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/Books",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"Books"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Authors - Data Validation",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Status Code Validation",
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"// Response Format Validation",
+									"pm.test(\"Response is an array\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"});",
+									"",
+									"// Data Structure Validation",
+									"pm.test(\"Authors have required fields\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.length > 0) {",
+									"        pm.expect(jsonData[0]).to.have.property('id');",
+									"        pm.expect(jsonData[0]).to.have.property('idBook');",
+									"        pm.expect(jsonData[0]).to.have.property('firstName');",
+									"        pm.expect(jsonData[0]).to.have.property('lastName');",
+									"    }",
+									"});",
+									"",
+									"// Data Type Validation",
+									"pm.test(\"Author fields have correct data types\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.length > 0) {",
+									"        pm.expect(jsonData[0].id).to.be.a('number');",
+									"        pm.expect(jsonData[0].firstName).to.be.a('string');",
+									"        pm.expect(jsonData[0].lastName).to.be.a('string');",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/Authors",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"Authors"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Activity - Data Validation",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Status Code Validation",
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"// Response Body Validation",
+									"pm.test(\"Updated activity returned\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('object');",
+									"});",
+									"",
+									"// Data Update Validation",
+									"pm.test(\"Activity data was updated\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.title).to.eql('Updated Activity Title');",
+									"    pm.expect(jsonData.completed).to.eql(true);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": 1,\n  \"title\": \"Updated Activity Title\",\n  \"dueDate\": \"2026-02-25T00:00:00.000Z\",\n  \"completed\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/Activities/1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"Activities",
+								"1"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Regression Tests",
+			"item": [
+				{
+					"name": "Get All Activities - Regression",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Status Code Regression",
+									"pm.test(\"[REGRESSION] Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"// API Availability Regression",
+									"pm.test(\"[REGRESSION] API is available and responding\", function () {",
+									"    pm.response.to.not.be.error;",
+									"    pm.response.to.not.have.jsonBody('error');",
+									"});",
+									"",
+									"// Response Time Regression",
+									"pm.test(\"[REGRESSION] Response time is acceptable\", function () {",
+									"    pm.expect(pm.response.responseTime).to.be.below(3000);",
+									"});",
+									"",
+									"// Data Consistency Regression",
+									"pm.test(\"[REGRESSION] Response contains activities data\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"    pm.expect(jsonData.length).to.be.above(0);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/Activities",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"Activities"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Books - Regression",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Status Code Regression",
+									"pm.test(\"[REGRESSION] Books endpoint returns 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"// Data Format Regression",
+									"pm.test(\"[REGRESSION] Books endpoint returns array\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"});",
+									"",
+									"// Backward Compatibility Regression",
+									"pm.test(\"[REGRESSION] Book structure unchanged\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.length > 0) {",
+									"        pm.expect(jsonData[0]).to.have.property('id');",
+									"        pm.expect(jsonData[0]).to.have.property('title');",
+									"        pm.expect(jsonData[0]).to.have.property('description');",
+									"        pm.expect(jsonData[0]).to.have.property('pageCount');",
+									"        pm.expect(jsonData[0]).to.have.property('excerpt');",
+									"        pm.expect(jsonData[0]).to.have.property('publishDate');",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/Books",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"Books"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Authors - Regression",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Status Code Regression",
+									"pm.test(\"[REGRESSION] Authors endpoint returns 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"// API Stability Regression",
+									"pm.test(\"[REGRESSION] Authors endpoint is stable\", function () {",
+									"    pm.response.to.not.be.error;",
+									"});",
+									"",
+									"// Backward Compatibility Regression",
+									"pm.test(\"[REGRESSION] Author structure unchanged\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.length > 0) {",
+									"        pm.expect(jsonData[0]).to.have.property('id');",
+									"        pm.expect(jsonData[0]).to.have.property('idBook');",
+									"        pm.expect(jsonData[0]).to.have.property('firstName');",
+									"        pm.expect(jsonData[0]).to.have.property('lastName');",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/Authors",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"Authors"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Users - Regression",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Status Code Regression",
+									"pm.test(\"[REGRESSION] Users endpoint returns 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"// Data Format Regression",
+									"pm.test(\"[REGRESSION] Users endpoint returns array\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"});",
+									"",
+									"// Backward Compatibility Regression",
+									"pm.test(\"[REGRESSION] User structure unchanged\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.length > 0) {",
+									"        pm.expect(jsonData[0]).to.have.property('id');",
+									"        pm.expect(jsonData[0]).to.have.property('userName');",
+									"        pm.expect(jsonData[0]).to.have.property('password');",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/Users",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"Users"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All CoverPhotos - Regression",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Status Code Regression",
+									"pm.test(\"[REGRESSION] CoverPhotos endpoint returns 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"// Data Format Regression",
+									"pm.test(\"[REGRESSION] CoverPhotos endpoint returns array\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"});",
+									"",
+									"// Backward Compatibility Regression",
+									"pm.test(\"[REGRESSION] CoverPhoto structure unchanged\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.length > 0) {",
+									"        pm.expect(jsonData[0]).to.have.property('id');",
+									"        pm.expect(jsonData[0]).to.have.property('idBook');",
+									"        pm.expect(jsonData[0]).to.have.property('url');",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/CoverPhotos",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"CoverPhotos"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "CRUD Operations - Regression",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// POST Method Regression",
+									"pm.test(\"[REGRESSION] POST method works\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"// Response Structure Regression",
+									"pm.test(\"[REGRESSION] POST returns created object\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('object');",
+									"    pm.expect(jsonData).to.have.property('id');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": 0,\n  \"title\": \"Regression Test Activity\",\n  \"dueDate\": \"2026-03-01T00:00:00.000Z\",\n  \"completed\": false\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/Activities",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"Activities"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Activity - Regression",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// DELETE Method Regression",
+									"pm.test(\"[REGRESSION] DELETE method works\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 204]);",
+									"});",
+									"",
+									"// API Functionality Regression",
+									"pm.test(\"[REGRESSION] DELETE endpoint is functional\", function () {",
+									"    pm.response.to.not.be.error;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/Activities/1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"Activities",
+								"1"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "https://your-app-service-name.azurewebsites.net",
+			"type": "string"
+		}
+	]
+}

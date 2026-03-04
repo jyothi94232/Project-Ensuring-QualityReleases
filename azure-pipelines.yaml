@@ -102,28 +102,29 @@ stages:
         script: |
           RG="$(resourceGroup)"
           SUB="$(subscriptionId)"
+          APP_SUFFIX="sv707d01"
           PLAN_NAME="myApplication-AppService"
+          APP_NAME="myApplication-AppService-${APP_SUFFIX}"
           BASE_SCOPE="/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.Web"
 
-          # Check if App Service Plan exists in Azure
+          # Import App Service Plan if it exists in Azure
           PLAN_EXISTS=$(az appservice plan show --name "$PLAN_NAME" --resource-group "$RG" --query "name" -o tsv 2>/dev/null || echo "")
           if [ -n "$PLAN_EXISTS" ]; then
             echo "Importing App Service Plan: $PLAN_NAME"
             terraform import module.appservice.azurerm_app_service_plan.test \
               "$BASE_SCOPE/serverfarms/$PLAN_NAME" || true
-
-            # Find the app service in this plan and import it
-            APP_NAME=$(az webapp list --resource-group "$RG" --query "[?appServicePlanId && contains(appServicePlanId,'$PLAN_NAME')].name" -o tsv 2>/dev/null | head -1)
-            if [ -n "$APP_NAME" ]; then
-              echo "Importing App Service: $APP_NAME"
-              # Extract the suffix from the app name
-              SUFFIX="${APP_NAME##*-}"
-              terraform import module.appservice.random_string.app_suffix "$SUFFIX" || true
-              terraform import module.appservice.azurerm_app_service.test \
-                "$BASE_SCOPE/sites/$APP_NAME" || true
-            fi
           else
-            echo "No existing App Service Plan found - Terraform will create it"
+            echo "App Service Plan not found in Azure - will be created"
+          fi
+
+          # Import App Service if it exists in Azure
+          APP_EXISTS=$(az webapp show --name "$APP_NAME" --resource-group "$RG" --query "name" -o tsv 2>/dev/null || echo "")
+          if [ -n "$APP_EXISTS" ]; then
+            echo "Importing App Service: $APP_NAME"
+            terraform import module.appservice.azurerm_app_service.test \
+              "$BASE_SCOPE/sites/$APP_NAME" || true
+          else
+            echo "App Service not found in Azure - will be created"
           fi
       env:
         ARM_CLIENT_ID: $(armClientId)

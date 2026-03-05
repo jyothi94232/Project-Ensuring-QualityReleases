@@ -366,12 +366,23 @@ stages:
           JMETER_HOME=$(pwd)/apache-jmeter-5.4.1
           mkdir -p $(System.DefaultWorkingDirectory)/stress-test-report
           echo "Running Stress Test against: https://$(appServiceName).azurewebsites.net"
+          # Force CSV output and include header names to ensure dashboard generator has a fixed column layout
           $JMETER_HOME/bin/jmeter -n \
             -t $(Pipeline.Workspace)/jmeter/StressTest.jmx \
             -JBASE_URL=https://$(appServiceName).azurewebsites.net \
+            -Jjmeter.save.saveservice.output_format=csv \
+            -Jjmeter.save.saveservice.print_field_names=true \
+            -Jjmeter.save.saveservice.timestamp_format=ms \
             -l $(System.DefaultWorkingDirectory)/stress-test-results.jtl \
             -j $(System.DefaultWorkingDirectory)/stress-test.log \
             -e -o $(System.DefaultWorkingDirectory)/stress-test-report
+
+          echo "--- Stress test JTL head ---"
+          head -n 10 $(System.DefaultWorkingDirectory)/stress-test-results.jtl || true
+          echo "--- Stress test JTL column count (first data line) ---"
+          awk -F',' 'NR>1{print NF; exit}' $(System.DefaultWorkingDirectory)/stress-test-results.jtl || true
+          echo "--- Stress test jmeter.log tail ---"
+          tail -n 200 $(System.DefaultWorkingDirectory)/stress-test.log || true
     
     # Publish Stress Test Results
     - task: PublishBuildArtifacts@1
@@ -410,13 +421,24 @@ stages:
           JMETER_HOME=$(pwd)/apache-jmeter-5.4.1
           mkdir -p $(System.DefaultWorkingDirectory)/endurance-test-report
           echo "Running Endurance Test against: https://$(appServiceName).azurewebsites.net"
+          # Force CSV output and include header names to ensure dashboard generator has a fixed column layout
           $JMETER_HOME/bin/jmeter -n \
             -t $(Pipeline.Workspace)/jmeter/EnduranceTest.jmx \
             -JBASE_URL=https://$(appServiceName).azurewebsites.net \
             -JDURATION=300 \
+            -Jjmeter.save.saveservice.output_format=csv \
+            -Jjmeter.save.saveservice.print_field_names=true \
+            -Jjmeter.save.saveservice.timestamp_format=ms \
             -l $(System.DefaultWorkingDirectory)/endurance-test-results.jtl \
             -j $(System.DefaultWorkingDirectory)/endurance-test.log \
             -e -o $(System.DefaultWorkingDirectory)/endurance-test-report
+
+          echo "--- Endurance test JTL head ---"
+          head -n 10 $(System.DefaultWorkingDirectory)/endurance-test-results.jtl || true
+          echo "--- Endurance test JTL column count (first data line) ---"
+          awk -F',' 'NR>1{print NF; exit}' $(System.DefaultWorkingDirectory)/endurance-test-results.jtl || true
+          echo "--- Endurance test jmeter.log tail ---"
+          tail -n 200 $(System.DefaultWorkingDirectory)/endurance-test.log || true
     
     # Publish Endurance Test Results
     - task: PublishBuildArtifacts@1

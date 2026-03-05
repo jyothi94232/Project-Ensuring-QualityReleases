@@ -367,7 +367,6 @@ stages:
             -Jjmeter.save.saveservice.output_format=csv \
             -Jjmeter.save.saveservice.print_field_names=true \
             -Jjmeter.save.saveservice.timestamp_format=ms \
-            -Jjmeter.save.saveservice.response_message=false \
             -Jjmeter.save.saveservice.responseData=false \
             -Jjmeter.save.saveservice.requestHeaders=false \
             -Jjmeter.save.saveservice.responseHeaders=false \
@@ -457,7 +456,6 @@ stages:
             -Jjmeter.save.saveservice.output_format=csv \
             -Jjmeter.save.saveservice.print_field_names=true \
             -Jjmeter.save.saveservice.timestamp_format=ms \
-            -Jjmeter.save.saveservice.response_message=false \
             -Jjmeter.save.saveservice.responseData=false \
             -Jjmeter.save.saveservice.requestHeaders=false \
             -Jjmeter.save.saveservice.responseHeaders=false \

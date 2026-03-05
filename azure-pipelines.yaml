@@ -294,7 +294,7 @@ stages:
         targetType: 'inline'
         script: |
           npm install -g newman
-          npm install -g newman-reporter-junitfull
+          npm install -g newman-reporter-junit
     
     # Run Postman Tests
     - task: Bash@3
@@ -310,8 +310,8 @@ stages:
             -e TestEnvironment.json \
             --env-var "baseUrl=https://$(appServiceName).azurewebsites.net" \
             --delay-request 500 \
-            --reporters cli,junitfull \
-            --reporter-junitfull-export $(System.DefaultWorkingDirectory)/postman-results.xml
+            --reporters cli,junit \
+            --reporter-junit-export $(System.DefaultWorkingDirectory)/postman-results.xml
     
     # Publish Postman Test Results
     - task: PublishTestResults@2
@@ -352,9 +352,14 @@ stages:
           wget -q https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.4.1.tgz
           tar -xzf apache-jmeter-5.4.1.tgz
           JMETER_HOME=$(pwd)/apache-jmeter-5.4.1
+
+          # Remove stale JTL and report dir so dashboard generator always gets a clean, single-schema file
+          rm -f $(System.DefaultWorkingDirectory)/stress-test-results.jtl
+          rm -rf $(System.DefaultWorkingDirectory)/stress-test-report
           mkdir -p $(System.DefaultWorkingDirectory)/stress-test-report
+
           echo "Running Stress Test against: https://$(appServiceName).azurewebsites.net"
-          # Force CSV output and include header names to ensure dashboard generator has a fixed column layout
+          # Force CSV output with header row so every run produces a consistent column layout
           $JMETER_HOME/bin/jmeter -n \
             -t $(Pipeline.Workspace)/jmeter/StressTest.jmx \
             -JBASE_URL=https://$(appServiceName).azurewebsites.net \
@@ -370,7 +375,7 @@ stages:
           echo "--- Stress test JTL column count (first data line) ---"
           awk -F',' 'NR>1{print NF; exit}' $(System.DefaultWorkingDirectory)/stress-test-results.jtl || true
           echo "--- Stress test jmeter.log tail ---"
-          tail -n 200 $(System.DefaultWorkingDirectory)/stress-test.log || true
+          tail -n 50 $(System.DefaultWorkingDirectory)/stress-test.log || true
     
     # Publish Stress Test Results
     - task: PublishBuildArtifacts@1
@@ -407,9 +412,14 @@ stages:
           wget -q https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.4.1.tgz
           tar -xzf apache-jmeter-5.4.1.tgz
           JMETER_HOME=$(pwd)/apache-jmeter-5.4.1
+
+          # Remove stale JTL and report dir so dashboard generator always gets a clean, single-schema file
+          rm -f $(System.DefaultWorkingDirectory)/endurance-test-results.jtl
+          rm -rf $(System.DefaultWorkingDirectory)/endurance-test-report
           mkdir -p $(System.DefaultWorkingDirectory)/endurance-test-report
+
           echo "Running Endurance Test against: https://$(appServiceName).azurewebsites.net"
-          # Force CSV output and include header names to ensure dashboard generator has a fixed column layout
+          # Force CSV output with header row so every run produces a consistent column layout
           $JMETER_HOME/bin/jmeter -n \
             -t $(Pipeline.Workspace)/jmeter/EnduranceTest.jmx \
             -JBASE_URL=https://$(appServiceName).azurewebsites.net \
@@ -426,7 +436,7 @@ stages:
           echo "--- Endurance test JTL column count (first data line) ---"
           awk -F',' 'NR>1{print NF; exit}' $(System.DefaultWorkingDirectory)/endurance-test-results.jtl || true
           echo "--- Endurance test jmeter.log tail ---"
-          tail -n 200 $(System.DefaultWorkingDirectory)/endurance-test.log || true
+          tail -n 50 $(System.DefaultWorkingDirectory)/endurance-test.log || true
     
     # Publish Endurance Test Results
     - task: PublishBuildArtifacts@1

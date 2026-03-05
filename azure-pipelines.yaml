@@ -375,29 +375,25 @@ stages:
             -j $(System.DefaultWorkingDirectory)/stress-test.log
 
           # Step 2: use Python csv module (handles quoted fields correctly) to normalise the JTL
-          python3 - <<'PYEOF'
-import csv, sys
-raw  = '$(System.DefaultWorkingDirectory)/stress-test-raw.jtl'
-clean = '$(System.DefaultWorkingDirectory)/stress-test-results.jtl'
-try:
-    with open(raw, newline='', encoding='utf-8', errors='replace') as fin:
-        reader = csv.reader(fin)
-        rows = list(reader)
-    if not rows:
-        print('WARNING: raw JTL empty'); sys.exit(0)
-    header = rows[0]
-    ncols  = len(header)
-    print(f'Header columns: {ncols}')
-    good = [r for r in rows[1:] if len(r) == ncols]
-    bad  = len(rows) - 1 - len(good)
-    print(f'Kept {len(good)} rows, dropped {bad} malformed rows')
-    with open(clean, 'w', newline='', encoding='utf-8') as fout:
-        writer = csv.writer(fout)
-        writer.writerow(header)
-        writer.writerows(good)
-except Exception as e:
-    print(f'ERROR normalising JTL: {e}'); sys.exit(1)
-PYEOF
+          export RAW_JTL="$(System.DefaultWorkingDirectory)/stress-test-raw.jtl"
+          export CLEAN_JTL="$(System.DefaultWorkingDirectory)/stress-test-results.jtl"
+          python3 -c "
+          import csv, sys, os
+          raw = os.environ['RAW_JTL']
+          clean = os.environ['CLEAN_JTL']
+          try:
+              fin = open(raw, newline='', encoding='utf-8', errors='replace')
+              rows = list(csv.reader(fin)); fin.close()
+              if not rows: print('WARNING: raw JTL empty'); sys.exit(0)
+              header, ncols = rows[0], len(rows[0])
+              print('Header columns: ' + str(ncols))
+              good = [r for r in rows[1:] if len(r) == ncols]
+              print('Kept ' + str(len(good)) + ' rows, dropped ' + str(len(rows)-1-len(good)) + ' malformed rows')
+              fout = open(clean, 'w', newline='', encoding='utf-8')
+              w = csv.writer(fout); w.writerow(header); w.writerows(good); fout.close()
+          except Exception as e:
+              print('ERROR normalising JTL: ' + str(e)); sys.exit(1)
+          "
 
           # Step 3: generate dashboard from cleaned JTL
           $JMETER_HOME/bin/jmeter -g $(System.DefaultWorkingDirectory)/stress-test-results.jtl -o $(System.DefaultWorkingDirectory)/stress-test-report || true
@@ -469,29 +465,25 @@ PYEOF
             -j $(System.DefaultWorkingDirectory)/endurance-test.log
 
           # Step 2: use Python csv module (handles quoted fields correctly) to normalise the JTL
-          python3 - <<'PYEOF'
-import csv, sys
-raw  = '$(System.DefaultWorkingDirectory)/endurance-test-raw.jtl'
-clean = '$(System.DefaultWorkingDirectory)/endurance-test-results.jtl'
-try:
-    with open(raw, newline='', encoding='utf-8', errors='replace') as fin:
-        reader = csv.reader(fin)
-        rows = list(reader)
-    if not rows:
-        print('WARNING: raw JTL empty'); sys.exit(0)
-    header = rows[0]
-    ncols  = len(header)
-    print(f'Header columns: {ncols}')
-    good = [r for r in rows[1:] if len(r) == ncols]
-    bad  = len(rows) - 1 - len(good)
-    print(f'Kept {len(good)} rows, dropped {bad} malformed rows')
-    with open(clean, 'w', newline='', encoding='utf-8') as fout:
-        writer = csv.writer(fout)
-        writer.writerow(header)
-        writer.writerows(good)
-except Exception as e:
-    print(f'ERROR normalising JTL: {e}'); sys.exit(1)
-PYEOF
+          export RAW_JTL="$(System.DefaultWorkingDirectory)/endurance-test-raw.jtl"
+          export CLEAN_JTL="$(System.DefaultWorkingDirectory)/endurance-test-results.jtl"
+          python3 -c "
+          import csv, sys, os
+          raw = os.environ['RAW_JTL']
+          clean = os.environ['CLEAN_JTL']
+          try:
+              fin = open(raw, newline='', encoding='utf-8', errors='replace')
+              rows = list(csv.reader(fin)); fin.close()
+              if not rows: print('WARNING: raw JTL empty'); sys.exit(0)
+              header, ncols = rows[0], len(rows[0])
+              print('Header columns: ' + str(ncols))
+              good = [r for r in rows[1:] if len(r) == ncols]
+              print('Kept ' + str(len(good)) + ' rows, dropped ' + str(len(rows)-1-len(good)) + ' malformed rows')
+              fout = open(clean, 'w', newline='', encoding='utf-8')
+              w = csv.writer(fout); w.writerow(header); w.writerows(good); fout.close()
+          except Exception as e:
+              print('ERROR normalising JTL: ' + str(e)); sys.exit(1)
+          "
 
           # Step 3: generate dashboard from cleaned JTL
           $JMETER_HOME/bin/jmeter -g $(System.DefaultWorkingDirectory)/endurance-test-results.jtl -o $(System.DefaultWorkingDirectory)/endurance-test-report || true

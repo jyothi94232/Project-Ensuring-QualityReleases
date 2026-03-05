@@ -59,7 +59,8 @@ def post_data(customer_id, shared_key, body, log_type):
     content_type = 'application/json'
     resource = '/api/logs'
     rfc1123date = datetime.datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')
-    content_length = len(body)
+    # Use byte length for content-length to match Azure signature requirements
+    content_length = len(body.encode('utf-8'))
     
     signature = build_signature(
         customer_id, shared_key, rfc1123date, 
@@ -68,14 +69,21 @@ def post_data(customer_id, shared_key, body, log_type):
     
     uri = f'https://{customer_id}.ods.opinsights.azure.com{resource}?api-version=2016-04-01'
     
+    # Ensure Log-Type contains only allowed characters (letters, numbers, underscore)
+    safe_log_type = re.sub(r'[^0-9A-Za-z_]', '_', log_type)
+
     headers = {
         'content-type': content_type,
+        'Accept': 'application/json',
         'Authorization': signature,
-        'Log-Type': log_type,
-        'x-ms-date': rfc1123date
+        'Log-Type': safe_log_type,
+        'x-ms-date': rfc1123date,
+        'Content-Length': str(content_length)
     }
     
-    response = requests.post(uri, data=body, headers=headers)
+    # Debug output: payload size
+    print(f'DEBUG: Uploading payload bytes={content_length} to {uri} with Log-Type={safe_log_type}_CL')
+    response = requests.post(uri, data=body.encode('utf-8'), headers=headers)
     
     if response.status_code >= 200 and response.status_code <= 299:
         print(f'✓ Successfully uploaded logs to Azure Log Analytics')

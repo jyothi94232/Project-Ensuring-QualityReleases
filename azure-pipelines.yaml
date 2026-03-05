@@ -359,6 +359,7 @@ stages:
 
           echo "Running Stress Test against: https://$(appServiceName).azurewebsites.net"
           # BASE_URL must be hostname only (no https://) - JMX sets domain=BASE_URL + protocol=PROTOCOL separately
+          # Step 1: run JMeter - suppress responseMessage/responseData to prevent embedded commas corrupting CSV
           $JMETER_HOME/bin/jmeter -n \
             -t $(Pipeline.Workspace)/jmeter/StressTest.jmx \
             -JBASE_URL=$(appServiceName).azurewebsites.net \
@@ -366,9 +367,40 @@ stages:
             -Jjmeter.save.saveservice.output_format=csv \
             -Jjmeter.save.saveservice.print_field_names=true \
             -Jjmeter.save.saveservice.timestamp_format=ms \
-            -l $(System.DefaultWorkingDirectory)/stress-test-results.jtl \
-            -j $(System.DefaultWorkingDirectory)/stress-test.log \
-            -e -o $(System.DefaultWorkingDirectory)/stress-test-report
+            -Jjmeter.save.saveservice.response_message=false \
+            -Jjmeter.save.saveservice.responseData=false \
+            -Jjmeter.save.saveservice.requestHeaders=false \
+            -Jjmeter.save.saveservice.responseHeaders=false \
+            -l $(System.DefaultWorkingDirectory)/stress-test-raw.jtl \
+            -j $(System.DefaultWorkingDirectory)/stress-test.log
+
+          # Step 2: use Python csv module (handles quoted fields correctly) to normalise the JTL
+          python3 - <<'PYEOF'
+import csv, sys
+raw  = '$(System.DefaultWorkingDirectory)/stress-test-raw.jtl'
+clean = '$(System.DefaultWorkingDirectory)/stress-test-results.jtl'
+try:
+    with open(raw, newline='', encoding='utf-8', errors='replace') as fin:
+        reader = csv.reader(fin)
+        rows = list(reader)
+    if not rows:
+        print('WARNING: raw JTL empty'); sys.exit(0)
+    header = rows[0]
+    ncols  = len(header)
+    print(f'Header columns: {ncols}')
+    good = [r for r in rows[1:] if len(r) == ncols]
+    bad  = len(rows) - 1 - len(good)
+    print(f'Kept {len(good)} rows, dropped {bad} malformed rows')
+    with open(clean, 'w', newline='', encoding='utf-8') as fout:
+        writer = csv.writer(fout)
+        writer.writerow(header)
+        writer.writerows(good)
+except Exception as e:
+    print(f'ERROR normalising JTL: {e}'); sys.exit(1)
+PYEOF
+
+          # Step 3: generate dashboard from cleaned JTL
+          $JMETER_HOME/bin/jmeter -g $(System.DefaultWorkingDirectory)/stress-test-results.jtl -o $(System.DefaultWorkingDirectory)/stress-test-report || true
 
           echo "--- Stress test JTL head ---"
           head -n 10 $(System.DefaultWorkingDirectory)/stress-test-results.jtl || true
@@ -420,6 +452,7 @@ stages:
 
           echo "Running Endurance Test against: https://$(appServiceName).azurewebsites.net"
           # BASE_URL must be hostname only (no https://) - JMX sets domain=BASE_URL + protocol=PROTOCOL separately
+          # Step 1: run JMeter - suppress responseMessage/responseData to prevent embedded commas corrupting CSV
           $JMETER_HOME/bin/jmeter -n \
             -t $(Pipeline.Workspace)/jmeter/EnduranceTest.jmx \
             -JBASE_URL=$(appServiceName).azurewebsites.net \
@@ -428,9 +461,40 @@ stages:
             -Jjmeter.save.saveservice.output_format=csv \
             -Jjmeter.save.saveservice.print_field_names=true \
             -Jjmeter.save.saveservice.timestamp_format=ms \
-            -l $(System.DefaultWorkingDirectory)/endurance-test-results.jtl \
-            -j $(System.DefaultWorkingDirectory)/endurance-test.log \
-            -e -o $(System.DefaultWorkingDirectory)/endurance-test-report
+            -Jjmeter.save.saveservice.response_message=false \
+            -Jjmeter.save.saveservice.responseData=false \
+            -Jjmeter.save.saveservice.requestHeaders=false \
+            -Jjmeter.save.saveservice.responseHeaders=false \
+            -l $(System.DefaultWorkingDirectory)/endurance-test-raw.jtl \
+            -j $(System.DefaultWorkingDirectory)/endurance-test.log
+
+          # Step 2: use Python csv module (handles quoted fields correctly) to normalise the JTL
+          python3 - <<'PYEOF'
+import csv, sys
+raw  = '$(System.DefaultWorkingDirectory)/endurance-test-raw.jtl'
+clean = '$(System.DefaultWorkingDirectory)/endurance-test-results.jtl'
+try:
+    with open(raw, newline='', encoding='utf-8', errors='replace') as fin:
+        reader = csv.reader(fin)
+        rows = list(reader)
+    if not rows:
+        print('WARNING: raw JTL empty'); sys.exit(0)
+    header = rows[0]
+    ncols  = len(header)
+    print(f'Header columns: {ncols}')
+    good = [r for r in rows[1:] if len(r) == ncols]
+    bad  = len(rows) - 1 - len(good)
+    print(f'Kept {len(good)} rows, dropped {bad} malformed rows')
+    with open(clean, 'w', newline='', encoding='utf-8') as fout:
+        writer = csv.writer(fout)
+        writer.writerow(header)
+        writer.writerows(good)
+except Exception as e:
+    print(f'ERROR normalising JTL: {e}'); sys.exit(1)
+PYEOF
+
+          # Step 3: generate dashboard from cleaned JTL
+          $JMETER_HOME/bin/jmeter -g $(System.DefaultWorkingDirectory)/endurance-test-results.jtl -o $(System.DefaultWorkingDirectory)/endurance-test-report || true
 
           echo "--- Endurance test JTL head ---"
           head -n 10 $(System.DefaultWorkingDirectory)/endurance-test-results.jtl || true

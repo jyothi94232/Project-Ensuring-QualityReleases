@@ -236,6 +236,26 @@ stages:
               deploymentMethod: 'zipDeploy'
               appSettings: '-WEBSITE_RUN_FROM_PACKAGE 1'
 
+          # Wait for App Service to warm up after deployment (avoids 503 on first request)
+          - task: Bash@3
+            displayName: 'Wait for App Service to warm up'
+            inputs:
+              targetType: 'inline'
+              script: |
+                APP_URL="https://$(appServiceName).azurewebsites.net/api/Activities"
+                echo "Waiting for App Service to become available: $APP_URL"
+                for i in $(seq 1 20); do
+                  STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL" || echo "000")
+                  echo "Attempt $i: HTTP $STATUS"
+                  if [ "$STATUS" = "200" ]; then
+                    echo "App Service is ready!"
+                    exit 0
+                  fi
+                  sleep 15
+                done
+                echo "WARNING: App Service did not return 200 after 5 minutes - continuing anyway"
+                exit 0
+
 #--------------------------------------------#
 # TEST - INTEGRATION (Postman)
 #--------------------------------------------#
@@ -284,6 +304,7 @@ stages:
           newman run StarterAPIs.json \
             -e TestEnvironment.json \
             --env-var "baseUrl=https://$(appServiceName).azurewebsites.net" \
+            --delay-request 500 \
             --reporters cli,junitfull \
             --reporter-junitfull-export $(System.DefaultWorkingDirectory)/postman-results.xml
     

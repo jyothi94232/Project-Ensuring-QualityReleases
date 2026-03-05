@@ -177,6 +177,24 @@ stages:
     pool:
       vmImage: 'ubuntu-latest'
     steps:
+    # Restore NuGet packages so all DLLs are present in bin/ before zipping
+    # (Several DLLs from NuGet packages may not be committed to git)
+    - task: Bash@3
+      displayName: 'Restore NuGet DLLs to bin'
+      inputs:
+        targetType: 'inline'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/automatedtesting/jmeter/fakerestapi'
+        script: |
+          echo "Installing NuGet CLI..."
+          sudo apt-get install -y nuget 2>/dev/null || true
+          echo "Restoring packages from packages.config..."
+          nuget install packages.config -OutputDirectory ./packages -NonInteractive 2>&1 | tail -15 || true
+          echo "Copying net4x DLLs to bin/ (skipping already-present files)..."
+          find ./packages -type f -name "*.dll" | grep -E '/lib/net4' | while read f; do
+            cp -n "$f" ./bin/ 2>/dev/null || true
+          done
+          echo "DLL count in bin/: $(ls bin/*.dll 2>/dev/null | wc -l)"
+
     # Archive FakeRestAPI
     - task: ArchiveFiles@2
       displayName: 'Archive FakeRestAPI'

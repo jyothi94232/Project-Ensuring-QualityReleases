@@ -1,8 +1,8 @@
 # Azure subscription vars
-subscription_id = "ae0c02e7-8b4b-4b32-ac32-179af329442d"
-client_id = "e5bc86a6-1048-47e5-9d14-6dc5ad03b33e"
-client_secret = "jNa8Q~JKS.gnjYthVflqwDscrV58YSQivVA-vb8w"
-tenant_id = "fb54d019-58bb-4708-a674-025ab02c966e"
+subscription_id = "6be59807-019c-4927-9e9b-b9d00f42e607"
+client_id = "024182c9-2efd-4231-934c-eb9c45c8800b"
+client_secret = "dKA8Q~KIq3j9r5tZztQEWZyPOJib3X4ti6Gelcvm"
+tenant_id = "0c87db37-a51d-41cb-af15-8cfb59be21d4"
 
 # Resource Group/Location
 location = "East US"
@@ -20,5 +20,5 @@ admin_username = "azureadmin"
 # Log Analytics
 workspace_name = "myApplication-log-analytics"
 
-# App Service unique suffix (globally unique app name: myApplication-AppService-sv707d01)
-app_suffix = "sv707d01"
+# App Service unique suffix (globally unique app name: myApplication-AppService-jlinga)
+app_suffix = "jlinga"

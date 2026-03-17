@@ -6,8 +6,8 @@ variables:
   resourceGroup: 'myResourceGroup'
   location: 'East US'
   terraformVersion: '1.0.0'
-  tfStateStorageAccount: 'svuniquetfstorage'
-  subscriptionId: 'ae0c02e7-8b4b-4b32-ac32-179af329442d'
+  tfStateStorageAccount: 'jluniquetfstorage'
+  subscriptionId: '6be59807-019c-4927-9e9b-b9d00f42e607'
   # armClientId, armClientSecret, armTenantId must be set as secret variables in Azure DevOps Pipeline Library
 
 stages:
@@ -85,7 +85,7 @@ stages:
         script: |
           RG="$(resourceGroup)"
           SUB="$(subscriptionId)"
-          APP_SUFFIX="sv707d01"
+          APP_SUFFIX="jlinga"
           PLAN_NAME="myApplication-AppService"
           APP_NAME="myApplication-AppService-${APP_SUFFIX}"
 

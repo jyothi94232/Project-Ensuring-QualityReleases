@@ -16,7 +16,7 @@ terraform {
     }
   }
   backend "azurerm" {
-    storage_account_name = "svuniquetfstorage"
+    storage_account_name = "jluniquetfstorage"
     container_name       = "tfstate"
     key                  = "terraform.tfstate"
   }
